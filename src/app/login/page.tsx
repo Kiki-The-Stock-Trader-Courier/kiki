@@ -7,7 +7,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/map";
+  const next = searchParams.get("next") ?? "/setup";
   const err = searchParams.get("error");
   const details = searchParams.get("details");
   const [pending, setPending] = useState(false);

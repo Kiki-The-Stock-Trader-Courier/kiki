@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kiki — 맛집 지도 & 챗봇
 
-## Getting Started
+Next.js + Supabase(로그인·DB) + 네이버 지역 검색 + (선택) n8n 챗봇 Webhook.
 
-First, run the development server:
+## 흐름
+
+1. **로그인** (`/login`) — Google (Supabase Auth)
+2. **연결 설정** (`/setup`) — Vercel 환경 변수 연결 여부 확인 (키는 앱에 입력하지 않음)
+3. **지도** (`/map`) — 위치 + 장소 마커 + 채팅 필터
+
+## 환경 변수
+
+`.env.local.example` 참고. 배포 시 **Vercel → Environment Variables**에 동일 이름으로 설정합니다.
+
+- **NEXT_PUBLIC_SITE_URL** — 프로덕션 URL (OAuth 리다이렉트용, 권장)
+- **NAVER_*** — 지역 검색 (없으면 데모 마커)
+- **N8N_CHAT_WEBHOOK_URL** — n8n에서 챗봇 응답을 줄 때 (없으면 앱 기본 문구만 사용)
+
+## n8n
+
+1. n8n에서 **Workflow → Import from File** 로 `n8n/kiki-chat.workflow.json` 가져오기  
+2. 워크플로 **Activate** 후 **Webhook** 노드에 표시된 **Production URL** 전체를 복사  
+3. Vercel에 `N8N_CHAT_WEBHOOK_URL` 로 등록 후 Redeploy  
+
+Webhook은 `POST` JSON `{ "message": "...", "filters": { "keyword": "카페", "maxPriceKrw": 15000 } }` 를 받고, 응답은 `{ "reply": "문자열" }` 형식이어야 합니다.
+
+## 개발
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

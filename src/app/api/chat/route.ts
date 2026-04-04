@@ -5,7 +5,6 @@ import {
   attachDemoPrice,
   buildSearchQuery,
   filterByMaxPrice,
-  isNaverApiConfigured,
   searchNaverLocal,
   type PlaceMarker,
 } from "@/lib/naver-places";
@@ -87,10 +86,8 @@ export async function POST(request: Request) {
   });
 
   let places = await searchNaverLocal(query, 5);
-  let placesSource: "naver" | "demo" = "naver";
   if (places.length === 0) {
     places = demoPlaces(lat, lng, filters.keyword);
-    placesSource = "demo";
   }
 
   let list = attachDemoPrice(places);
@@ -117,7 +114,5 @@ export async function POST(request: Request) {
     filters,
     query,
     places: list,
-    placesSource,
-    naverApiConfigured: isNaverApiConfigured(),
   });
 }

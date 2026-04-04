@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import MapView from "@/components/MapView";
 import type { MapPlace } from "@/components/MapInner";
@@ -28,13 +29,6 @@ export default function MapPageClient() {
   ]);
   const [loading, setLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
-  /** 네이버 지역 검색 연결 여부·마커가 실제 검색인지 데모인지 */
-  const [naverApiConfigured, setNaverApiConfigured] = useState<boolean | null>(
-    null,
-  );
-  const [placesSource, setPlacesSource] = useState<"naver" | "demo" | null>(
-    null,
-  );
 
   const loadPlaces = useCallback(
     async (q: string) => {
@@ -45,16 +39,8 @@ export default function MapPageClient() {
       });
       const res = await fetch(`/api/places?${params}`);
       if (!res.ok) return;
-      const data = (await res.json()) as {
-        places: MapPlace[];
-        placesSource?: "naver" | "demo";
-        naverApiConfigured?: boolean;
-      };
+      const data = (await res.json()) as { places: MapPlace[] };
       setPlaces(data.places ?? []);
-      if (data.placesSource) setPlacesSource(data.placesSource);
-      if (data.naverApiConfigured != null) {
-        setNaverApiConfigured(data.naverApiConfigured);
-      }
     },
     [userLat, userLng],
   );
@@ -114,47 +100,16 @@ export default function MapPageClient() {
       const data = (await res.json()) as {
         reply: string;
         places: MapPlace[];
-        placesSource?: "naver" | "demo";
-        naverApiConfigured?: boolean;
       };
       setLines((prev) => [...prev, { role: "assistant", text: data.reply }]);
       if (data.places?.length) setPlaces(data.places);
-      if (data.placesSource) setPlacesSource(data.placesSource);
-      if (data.naverApiConfigured != null) {
-        setNaverApiConfigured(data.naverApiConfigured);
-      }
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex flex-1 flex-col min-h-0 h-[100dvh]">
-      {naverApiConfigured === false && (
-        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-100">
-          <strong>지도는 표시 중입니다.</strong> 실제 매장 검색을 쓰려면 Vercel
-          환경 변수에{" "}
-          <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-900/80">
-            NAVER_CLIENT_ID
-          </code>
-          ,{" "}
-          <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-900/80">
-            NAVER_CLIENT_SECRET
-          </code>
-          를 넣고 재배포하세요. (네이버 개발자센터 검색·지역 API)
-        </div>
-      )}
-      {naverApiConfigured === true && placesSource === "naver" && (
-        <div className="shrink-0 border-b border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
-          네이버 지역 검색 API로 주변 장소를 불러왔습니다.
-        </div>
-      )}
-      {naverApiConfigured === true && placesSource === "demo" && (
-        <div className="shrink-0 border-b border-zinc-200 bg-zinc-100 px-3 py-1.5 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-          검색 결과가 없어 데모 마커를 표시했습니다. 검색어를 바꿔 보세요.
-        </div>
-      )}
-      <div className="flex flex-1 flex-col md:flex-row min-h-0">
+    <div className="flex flex-1 flex-col md:flex-row h-[calc(100vh-0px)] min-h-0">
       <section className="relative flex-1 min-h-[45vh] md:min-h-0 border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800">
         <MapView userLat={userLat} userLng={userLng} places={places} />
         {geoError && (
@@ -166,13 +121,21 @@ export default function MapPageClient() {
       <aside className="flex w-full md:w-[400px] flex-col border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
         <header className="flex items-center justify-between gap-2 border-b border-zinc-200 dark:border-zinc-800 px-3 py-2">
           <h1 className="text-sm font-semibold">맛집 챗봇</h1>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="text-xs rounded border border-zinc-300 dark:border-zinc-600 px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            로그아웃
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/setup"
+              className="text-xs rounded border border-zinc-300 dark:border-zinc-600 px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              연결
+            </Link>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="text-xs rounded border border-zinc-300 dark:border-zinc-600 px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              로그아웃
+            </button>
+          </div>
         </header>
         <div className="flex-1 overflow-y-auto p-3 space-y-2 text-sm">
           {lines.map((line, i) => (
@@ -209,7 +172,6 @@ export default function MapPageClient() {
           </button>
         </div>
       </aside>
-      </div>
     </div>
   );
 }

@@ -1,13 +1,5 @@
 import type { ParsedFilters } from "@/lib/chat-filters";
 
-/** Vercel/서버 환경 변수에 네이버 Client ID·Secret 이 모두 있는지 */
-export function isNaverApiConfigured(): boolean {
-  return Boolean(
-    process.env.NAVER_CLIENT_ID?.trim() &&
-      process.env.NAVER_CLIENT_SECRET?.trim(),
-  );
-}
-
 export type PlaceMarker = {
   title: string;
   category: string;

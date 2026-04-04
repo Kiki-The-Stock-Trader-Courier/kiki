@@ -6,7 +6,7 @@ export async function middleware(request: NextRequest) {
     const { supabaseResponse, user } = await updateSession(request);
     const path = request.nextUrl.pathname;
 
-    if (path.startsWith("/map") && !user) {
+    if ((path.startsWith("/map") || path.startsWith("/setup")) && !user) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       url.searchParams.set("next", path);
@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
 
     if (path === "/login" && user) {
       const url = request.nextUrl.clone();
-      url.pathname = "/map";
+      url.pathname = "/setup";
       return NextResponse.redirect(url);
     }
 

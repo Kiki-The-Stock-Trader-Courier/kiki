@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import {
   attachDemoPrice,
   buildSearchQuery,
-  isNaverApiConfigured,
   searchNaverLocal,
   type PlaceMarker,
 } from "@/lib/naver-places";
@@ -52,18 +51,10 @@ export async function GET(request: Request) {
   );
 
   let places = await searchNaverLocal(query, 5);
-  let placesSource: "naver" | "demo" = "naver";
   if (places.length === 0) {
     places = demoPlaces(lat, lng, filters.keyword || "맛집");
-    placesSource = "demo";
   }
 
   const withPrice = attachDemoPrice(places);
-  const naverApiConfigured = isNaverApiConfigured();
-  return NextResponse.json({
-    places: withPrice,
-    query,
-    placesSource,
-    naverApiConfigured,
-  });
+  return NextResponse.json({ places: withPrice, query });
 }

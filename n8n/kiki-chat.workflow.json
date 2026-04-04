@@ -1,0 +1,75 @@
+{
+  "name": "Kiki Chat Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kiki-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-kiki",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "kiki-chat"
+    },
+    {
+      "parameters": {
+        "jsCode": "const root = $input.first().json;\nconst body = root.body && typeof root.body === 'object' ? root.body : root;\nconst message = body.message ?? '';\nconst filters = body.filters ?? {};\nconst kw = filters.keyword ?? '맛집';\nconst price = filters.maxPriceKrw;\nconst priceLine = price ? ` 가격 상한 ${price}원` : '';\nreturn {\n  json: {\n    reply: `[n8n] \"${kw}\" 검색 기준으로 도와드릴게요.${priceLine} (메시지: ${message.slice(0, 80)})`\n  }\n};"
+      },
+      "id": "code-reply",
+      "name": "BuildReply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $json.reply }) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "BuildReply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuildReply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "versionId": "1"
+}
