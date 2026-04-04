@@ -24,11 +24,15 @@ export default function MapPageClient() {
   const [lines, setLines] = useState<ChatLine[]>([
     {
       role: "assistant",
-      text: "원하는 음식 종류(예: 카페, 한식)나 가격(예: 2만원 이하)을 말해 주세요.",
+      text: "입력한 내용은 이 사이트 서버의 /api/chat 으로 전달됩니다. 키워드·가격을 읽고 지도 장소를 바꿉니다. Vercel에 N8N_CHAT_WEBHOOK_URL을 넣으면 답 문장을 n8n이 만들 수 있습니다.\n\n원하는 음식 종류(예: 카페, 한식)나 가격(예: 2만원 이하)을 말해 주세요.",
     },
   ]);
   const [loading, setLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [n8nConfigured, setN8nConfigured] = useState<boolean | null>(null);
+  const [lastReplySource, setLastReplySource] = useState<"n8n" | "server" | null>(
+    null,
+  );
 
   const loadPlaces = useCallback(
     async (q: string) => {
@@ -67,6 +71,13 @@ export default function MapPageClient() {
     void loadPlaces("맛집");
   }, [loadPlaces]);
 
+  useEffect(() => {
+    void fetch("/api/integrations/status")
+      .then((r) => r.json() as Promise<{ n8nChat?: boolean }>)
+      .then((j) => setN8nConfigured(Boolean(j.n8nChat)))
+      .catch(() => setN8nConfigured(null));
+  }, []);
+
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -99,8 +110,10 @@ export default function MapPageClient() {
       }
       const data = (await res.json()) as {
         reply: string;
+        replySource?: "n8n" | "server";
         places: MapPlace[];
       };
+      setLastReplySource(data.replySource ?? "server");
       setLines((prev) => [...prev, { role: "assistant", text: data.reply }]);
       if (data.places?.length) setPlaces(data.places);
     } finally {
@@ -119,9 +132,10 @@ export default function MapPageClient() {
         )}
       </section>
       <aside className="flex w-full md:w-[400px] flex-col border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
-        <header className="flex items-center justify-between gap-2 border-b border-zinc-200 dark:border-zinc-800 px-3 py-2">
-          <h1 className="text-sm font-semibold">맛집 챗봇</h1>
-          <div className="flex items-center gap-2">
+        <header className="border-b border-zinc-200 dark:border-zinc-800 px-3 py-2 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-sm font-semibold">맛집 챗봇</h1>
+            <div className="flex items-center gap-2">
             <Link
               href="/setup"
               className="text-xs rounded border border-zinc-300 dark:border-zinc-600 px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
@@ -135,19 +149,43 @@ export default function MapPageClient() {
             >
               로그아웃
             </button>
+            </div>
           </div>
+          <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+            연결: 채팅 → <code className="rounded bg-zinc-200/60 dark:bg-zinc-800 px-1">POST /api/chat</code>
+            {n8nConfigured === true && " · n8n Webhook URL 설정됨"}
+            {n8nConfigured === false && " · n8n 미설정(답은 서버 기본 문장)"}
+            {lastReplySource && (
+              <>
+                {" "}
+                · 마지막 답변:{" "}
+                <strong>
+                  {lastReplySource === "n8n" ? "n8n" : "서버"}
+                </strong>
+              </>
+            )}
+          </p>
         </header>
-        <div className="flex-1 overflow-y-auto p-3 space-y-2 text-sm">
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3 text-sm min-h-0">
           {lines.map((line, i) => (
             <div
-              key={`${i}-${line.text.slice(0, 12)}`}
+              key={`chat-${i}-${line.role}`}
               className={
-                line.role === "user"
-                  ? "ml-6 rounded-lg bg-blue-600 text-white px-3 py-2"
-                  : "mr-6 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3 py-2"
+                line.role === "user" ? "flex justify-end" : "flex justify-start"
               }
             >
-              {line.text}
+              <div
+                className={
+                  line.role === "user"
+                    ? "max-w-[min(100%,18rem)] rounded-2xl rounded-br-md bg-blue-600 text-white px-3 py-2.5 shadow-sm break-words whitespace-pre-wrap"
+                    : "max-w-[min(100%,20rem)] rounded-2xl rounded-bl-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3 py-2.5 shadow-sm break-words whitespace-pre-wrap"
+                }
+              >
+                <span className="sr-only">
+                  {line.role === "user" ? "나: " : "챗봇: "}
+                </span>
+                {line.text}
+              </div>
             </div>
           ))}
           {loading && (

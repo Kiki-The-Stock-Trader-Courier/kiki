@@ -29,9 +29,11 @@ function demoPlaces(lat: number, lng: number, keyword: string): PlaceMarker[] {
 async function maybeCallN8n(
   message: string,
   filters: ParsedFilters,
-): Promise<string | null> {
-  const url = process.env.N8N_CHAT_WEBHOOK_URL;
-  if (!url) return null;
+): Promise<{ text: string | null; usedN8n: boolean }> {
+  const url = process.env.N8N_CHAT_WEBHOOK_URL?.trim();
+  if (!url) {
+    return { text: null, usedN8n: false };
+  }
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -39,11 +41,17 @@ async function maybeCallN8n(
       body: JSON.stringify({ message, filters }),
       signal: AbortSignal.timeout(20000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { text: null, usedN8n: false };
+    }
     const data = (await res.json()) as { reply?: string };
-    return data.reply ?? null;
+    const text = data.reply ?? null;
+    if (text != null && String(text).length > 0) {
+      return { text: String(text), usedN8n: true };
+    }
+    return { text: null, usedN8n: false };
   } catch {
-    return null;
+    return { text: null, usedN8n: false };
   }
 }
 
@@ -93,14 +101,15 @@ export async function POST(request: Request) {
   let list = attachDemoPrice(places);
   list = filterByMaxPrice(list, filters.maxPriceKrw);
 
-  const n8nReply = await maybeCallN8n(message, filters);
+  const n8n = await maybeCallN8n(message, filters);
   const assistantText =
-    n8nReply ??
+    n8n.text ??
     `「${filters.keyword}」 기준으로 검색했어요.${
       filters.maxPriceKrw
         ? ` 가격은 앱에서 데모 금액(건당 ${filters.maxPriceKrw.toLocaleString()}원 이하)으로 필터했습니다.`
         : ""
     } 결과 ${list.length}곳입니다.`;
+  const replySource = n8n.usedN8n ? "n8n" : "server";
 
   await supabase.from("chat_messages").insert({
     user_id: user.id,
@@ -111,6 +120,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     reply: assistantText,
+    replySource,
     filters,
     query,
     places: list,
