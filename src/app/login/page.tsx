@@ -1,5 +1,6 @@
 "use client";
 
+import { getPublicSiteOrigin } from "@/lib/app-url";
 import { createClient } from "@/lib/supabase/client";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -14,7 +15,7 @@ function LoginForm() {
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    setOrigin(getPublicSiteOrigin());
   }, []);
 
   const hasSupabaseEnv = useMemo(() => {
@@ -52,11 +53,16 @@ function LoginForm() {
     setPending(true);
     try {
       const supabase = createClient();
-      const origin = window.location.origin;
+      const siteOrigin = getPublicSiteOrigin();
+      if (!siteOrigin) {
+        setActionError("사이트 주소를 알 수 없습니다. NEXT_PUBLIC_SITE_URL 을 설정하세요.");
+        setPending(false);
+        return;
+      }
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+          redirectTo: `${siteOrigin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
       if (error) {
@@ -112,6 +118,11 @@ function LoginForm() {
       <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/80 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-900 dark:text-blue-100 space-y-1">
         <p className="font-medium">JSON에 provider is not enabled 가 보일 때</p>
         <ol className="list-decimal list-inside space-y-1 text-blue-800/90 dark:text-blue-200/90">
+          <li>
+            Authentication → <strong>URL Configuration</strong> → <strong>Site URL</strong>을{" "}
+            <code className="rounded bg-white/60 dark:bg-black/30 px-1">https://…vercel.app</code> 로
+            두세요. <strong>localhost만</strong>이면 로그인 후 localhost로 돌아가 연결이 거부될 수 있습니다.
+          </li>
           <li>
             <a
               className="underline"
