@@ -60,15 +60,25 @@ function LoginForm() {
         },
       });
       if (error) {
-        setActionError(`${error.message}${error.status ? ` (${error.status})` : ""}`);
+        const raw = `${error.message}${error.status ? ` (${error.status})` : ""}`;
+        const disabled =
+          /provider is not enabled|Unsupported provider/i.test(error.message);
+        setActionError(
+          disabled
+            ? "Supabase에서 Google 로그인이 꺼져 있습니다. 대시보드 → Authentication → Providers → Google → Enable 후 Client ID·Secret을 저장하세요."
+            : raw,
+        );
         setPending(false);
         return;
       }
-      if (!data?.url) {
-        setActionError("OAuth 시작 URL을 받지 못했습니다. Supabase에서 Google 로그인을 켰는지 확인하세요.");
-        setPending(false);
+      if (data?.url) {
+        window.location.assign(data.url);
+        return;
       }
-      // 성공 시 브라우저가 data.url 로 이동 — pending 유지
+      setActionError(
+        "OAuth URL을 받지 못했습니다. Supabase에서 Google 제공자를 켰는지 확인하세요.",
+      );
+      setPending(false);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "알 수 없는 오류");
       setPending(false);
@@ -99,6 +109,34 @@ function LoginForm() {
           {actionError}
         </p>
       )}
+      <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/80 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-900 dark:text-blue-100 space-y-1">
+        <p className="font-medium">JSON에 provider is not enabled 가 보일 때</p>
+        <ol className="list-decimal list-inside space-y-1 text-blue-800/90 dark:text-blue-200/90">
+          <li>
+            <a
+              className="underline"
+              href="https://supabase.com/dashboard"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Supabase Dashboard
+            </a>
+            → Authentication → Providers → <strong>Google</strong>
+          </li>
+          <li>Google 을 <strong>Enable</strong> 로 켭니다.</li>
+          <li>
+            Google Cloud의 OAuth 클라이언트 <strong>Client ID / Client Secret</strong>을
+            붙여 넣고 저장합니다.
+          </li>
+          <li>
+            Google Cloud 쪽 &quot;승인된 리디렉션 URI&quot;에는{" "}
+            <code className="rounded bg-white/60 dark:bg-black/30 px-1">
+              (프로젝트URL)/auth/v1/callback
+            </code>
+            형태로 Supabase가 제시하는 주소만 넣습니다.
+          </li>
+        </ol>
+      </div>
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Supabase → Authentication → URL에{" "}
         <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-1 break-all">
