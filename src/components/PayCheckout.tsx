@@ -17,10 +17,21 @@ type OrderSession = {
   checkoutMode: "widget" | "payment";
 };
 
+/** 위젯에 API 개별 키를 넣었을 때 SDK가 내는 오류 — 결제창(payment)으로 자동 전환 */
+function isApiKeyRejectedByWidgets(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    msg.includes("API 개별 연동 키") ||
+    msg.includes("NotSupportedAPIIndividualKey") ||
+    msg.includes("결제위젯 연동 키의 클라이언트 키")
+  );
+}
+
 /**
  * 토스 단건 결제
  * - `checkoutMode: payment` — API 개별 연동 키, `payment().requestPayment(CARD)` 로 결제창 오픈
  * - `checkoutMode: widget` — 결제위젯 연동 키, 결제수단·약관 UI 후 `requestPayment`
+ * - 서버가 widget으로 응답했는데 클라이언트 키가 API 개별인 경우 → 위젯 초기화 실패 시 결제창으로 폴백
  */
 export function PayCheckout() {
   const [amountInput, setAmountInput] = useState("1000");
@@ -29,6 +40,8 @@ export function PayCheckout() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
+  /** 서버 모드와 다를 수 있음(API 키를 위젯 전용 env에 넣은 경우 폴백 후 `payment`) */
+  const [effectiveMode, setEffectiveMode] = useState<"widget" | "payment" | null>(null);
   /** 위젯: render 완료 후 / 결제창: payment 인스턴스 준비 후 */
   const [checkoutReady, setCheckoutReady] = useState(false);
   const checkoutRef = useRef<TossPaymentsWidgets | TossPaymentsPayment | null>(null);
@@ -39,6 +52,7 @@ export function PayCheckout() {
     setSession(null);
     checkoutRef.current = null;
     setCheckoutReady(false);
+    setEffectiveMode(null);
     const amount = Number(amountInput);
     const res = await fetch("/api/payments/orders", {
       method: "POST",
@@ -80,6 +94,7 @@ export function PayCheckout() {
           const payment = tossPayments.payment({ customerKey: session.customerKey });
           if (!cancelled) {
             checkoutRef.current = payment;
+            setEffectiveMode("payment");
             setCheckoutReady(true);
           }
         } catch (e) {
@@ -96,7 +111,7 @@ export function PayCheckout() {
       };
     }
 
-    // 결제위젯 연동 키: 결제수단·약관 UI
+    // 결제위젯 연동 키: 결제수단·약관 UI (실제 키가 API 개별이면 아래에서 결제창으로 폴백)
     (async () => {
       try {
         const tossPayments = await loadTossPayments(session.clientKey);
@@ -110,13 +125,31 @@ export function PayCheckout() {
         });
         if (!cancelled) {
           checkoutRef.current = widgets;
+          setEffectiveMode("widget");
           setCheckoutReady(true);
         }
       } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "결제 UI 로드 실패");
-          setCheckoutReady(false);
+        if (cancelled) return;
+        if (isApiKeyRejectedByWidgets(e)) {
+          try {
+            const tossPayments = await loadTossPayments(session.clientKey);
+            const payment = tossPayments.payment({ customerKey: session.customerKey });
+            if (!cancelled) {
+              checkoutRef.current = payment;
+              setEffectiveMode("payment");
+              setCheckoutReady(true);
+              setError(null);
+            }
+          } catch (e2) {
+            if (!cancelled) {
+              setError(e2 instanceof Error ? e2.message : "결제 SDK 초기화 실패");
+              setCheckoutReady(false);
+            }
+          }
+          return;
         }
+        setError(e instanceof Error ? e.message : "결제 UI 로드 실패");
+        setCheckoutReady(false);
       }
     })();
 
@@ -127,6 +160,8 @@ export function PayCheckout() {
     };
   }, [session]);
 
+  const displayMode = effectiveMode ?? session?.checkoutMode ?? "widget";
+
   const requestPayment = async () => {
     const ref = checkoutRef.current;
     if (!session || !ref || !checkoutReady) {
@@ -136,7 +171,7 @@ export function PayCheckout() {
     setPaying(true);
     setError(null);
     try {
-      if (session.checkoutMode === "payment") {
+      if (displayMode === "payment") {
         const payment = ref as TossPaymentsPayment;
         await payment.requestPayment({
           method: "CARD",
@@ -196,15 +231,15 @@ export function PayCheckout() {
         <>
           <p className="text-xs text-zinc-500">
             주문번호 <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-1">{session.orderId}</code>
-            {session.checkoutMode === "payment" && (
+            {displayMode === "payment" && (
               <span className="ml-2 text-zinc-400">· API 개별 연동(통합 결제창)</span>
             )}
-            {session.checkoutMode === "widget" && (
+            {displayMode === "widget" && (
               <span className="ml-2 text-zinc-400">· 결제위젯 UI</span>
             )}
           </p>
 
-          {session.checkoutMode === "widget" ? (
+          {displayMode === "widget" ? (
             <>
               <div id="pay-payment-method" className="min-h-[120px]" />
               <div id="pay-agreement" className="min-h-[80px]" />
@@ -222,7 +257,7 @@ export function PayCheckout() {
             )
           )}
 
-          {session.checkoutMode === "payment" && checkoutReady && (
+          {displayMode === "payment" && checkoutReady && (
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
               아래 버튼을 누르면 토스 카드·간편결제 통합 결제창이 열립니다.
             </p>

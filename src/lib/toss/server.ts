@@ -37,18 +37,26 @@ export function getTossCheckoutClientKeyAndMode(): {
   );
 }
 
-/** 결제 승인 API(`/v1/payments/confirm`) — 클라이언트 키 종류와 짝이 맞는 시크릿 */
+/**
+ * 결제 승인 API(`/v1/payments/confirm`)용 시크릿.
+ * 클라이언트 키는 `getTossCheckoutClientKeyAndMode`와 같은 규칙으로 고르지만,
+ * 시크릿은 종종 `TOSS_PAYMENTS_SECRET_KEY` / `TOSS_WIDGET_SECRET_KEY` 중 한쪽에만 두는 경우가 있어
+ * (API 개별 키를 위젯 이름 변수에 넣는 등) 둘 중 설정된 쪽을 사용합니다.
+ */
 export function getTossSecretKeyForConfirm(): string {
-  if (process.env.NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY?.trim()) {
-    const k = process.env.TOSS_PAYMENTS_SECRET_KEY?.trim();
-    if (!k) {
-      throw new Error(
-        "NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY 를 쓰는 경우 TOSS_PAYMENTS_SECRET_KEY 가 필요합니다. (API 개별 연동 시크릿 키)",
-      );
-    }
-    return k;
-  }
-  return getTossWidgetSecretKey();
+  const payClient = Boolean(process.env.NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY?.trim());
+  const paySecret = process.env.TOSS_PAYMENTS_SECRET_KEY?.trim();
+  const widClient = Boolean(process.env.NEXT_PUBLIC_TOSS_WIDGET_CLIENT_KEY?.trim());
+  const widSecret = process.env.TOSS_WIDGET_SECRET_KEY?.trim();
+
+  if (payClient && paySecret) return paySecret;
+  if (widClient && widSecret) return widSecret;
+  if (paySecret) return paySecret;
+  if (widSecret) return widSecret;
+
+  throw new Error(
+    "토스 시크릿 키가 없습니다. TOSS_PAYMENTS_SECRET_KEY 또는 TOSS_WIDGET_SECRET_KEY 중 하나를 설정하세요. (결제에 사용한 키와 같은 상점의 시크릿)",
+  );
 }
 
 /** 결제위젯 연동 시크릿 키 (서버 전용) — 빌링·위젯 전용 흐름 */
