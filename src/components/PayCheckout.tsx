@@ -1,6 +1,10 @@
 "use client";
 
-import { loadTossPayments, type TossPaymentsWidgets } from "@tosspayments/tosspayments-sdk";
+import {
+  loadTossPayments,
+  type TossPaymentsPayment,
+  type TossPaymentsWidgets,
+} from "@tosspayments/tosspayments-sdk";
 import { useEffect, useRef, useState } from "react";
 
 type OrderSession = {
@@ -9,11 +13,14 @@ type OrderSession = {
   orderName: string;
   customerKey: string;
   clientKey: string;
+  /** API 개별 키 → `payment()` 통합 결제창 / 결제위젯 키 → `widgets` UI */
+  checkoutMode: "widget" | "payment";
 };
 
 /**
- * 토스 결제위젯 v2 — 주문 생성 후 결제 UI 렌더링 및 requestPayment.
- * `clientKey` 는 결제위젯 연동 클라이언트 키(서버 `/api/payments/orders` 응답). 개별 연동 키는 사용 불가.
+ * 토스 단건 결제
+ * - `checkoutMode: payment` — API 개별 연동 키, `payment().requestPayment(CARD)` 로 결제창 오픈
+ * - `checkoutMode: widget` — 결제위젯 연동 키, 결제수단·약관 UI 후 `requestPayment`
  */
 export function PayCheckout() {
   const [amountInput, setAmountInput] = useState("1000");
@@ -22,23 +29,27 @@ export function PayCheckout() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
-  /** renderPaymentMethods / renderAgreement 완료 후에만 true — 그 전에 결제하기 누르면 ref 가 비어 있음 */
-  const [widgetsReady, setWidgetsReady] = useState(false);
-  const widgetsRef = useRef<TossPaymentsWidgets | null>(null);
+  /** 위젯: render 완료 후 / 결제창: payment 인스턴스 준비 후 */
+  const [checkoutReady, setCheckoutReady] = useState(false);
+  const checkoutRef = useRef<TossPaymentsWidgets | TossPaymentsPayment | null>(null);
 
   const createOrder = async () => {
     setLoading(true);
     setError(null);
     setSession(null);
-    widgetsRef.current = null;
-    setWidgetsReady(false);
+    checkoutRef.current = null;
+    setCheckoutReady(false);
     const amount = Number(amountInput);
     const res = await fetch("/api/payments/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount, orderName: orderName.trim() || "Kiki 단건 결제" }),
     });
-    const data = (await res.json()) as { error?: string; message?: string } & Partial<OrderSession>;
+    const data = (await res.json()) as {
+      error?: string;
+      message?: string;
+      checkoutMode?: "widget" | "payment";
+    } & Partial<OrderSession>;
     setLoading(false);
     if (!res.ok) {
       setError(data.message ?? data.error ?? "주문 생성 실패");
@@ -50,6 +61,7 @@ export function PayCheckout() {
       orderName: data.orderName!,
       customerKey: data.customerKey!,
       clientKey: data.clientKey!,
+      checkoutMode: data.checkoutMode ?? "widget",
     });
   };
 
@@ -57,9 +69,34 @@ export function PayCheckout() {
     if (!session) return;
 
     let cancelled = false;
-    setWidgetsReady(false);
-    widgetsRef.current = null;
+    setCheckoutReady(false);
+    checkoutRef.current = null;
 
+    // API 개별 연동 키: 통합 결제창 (위젯 UI 없음)
+    if (session.checkoutMode === "payment") {
+      (async () => {
+        try {
+          const tossPayments = await loadTossPayments(session.clientKey);
+          const payment = tossPayments.payment({ customerKey: session.customerKey });
+          if (!cancelled) {
+            checkoutRef.current = payment;
+            setCheckoutReady(true);
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setError(e instanceof Error ? e.message : "결제 SDK 초기화 실패");
+            setCheckoutReady(false);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+        checkoutRef.current = null;
+        setCheckoutReady(false);
+      };
+    }
+
+    // 결제위젯 연동 키: 결제수단·약관 UI
     (async () => {
       try {
         const tossPayments = await loadTossPayments(session.clientKey);
@@ -72,41 +109,52 @@ export function PayCheckout() {
           selector: "#pay-agreement",
         });
         if (!cancelled) {
-          widgetsRef.current = widgets;
-          setWidgetsReady(true);
+          checkoutRef.current = widgets;
+          setCheckoutReady(true);
         }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "결제 UI 로드 실패");
-          setWidgetsReady(false);
+          setCheckoutReady(false);
         }
       }
     })();
 
     return () => {
       cancelled = true;
-      widgetsRef.current = null;
-      setWidgetsReady(false);
+      checkoutRef.current = null;
+      setCheckoutReady(false);
     };
   }, [session]);
 
   const requestPayment = async () => {
-    const w = widgetsRef.current;
-    if (!session || !w || !widgetsReady) {
-      setError(
-        "결제 UI를 불러오는 중입니다. 잠시 후 다시 눌러 주세요.",
-      );
+    const ref = checkoutRef.current;
+    if (!session || !ref || !checkoutReady) {
+      setError("결제 준비 중입니다. 잠시 후 다시 눌러 주세요.");
       return;
     }
     setPaying(true);
     setError(null);
     try {
-      await w.requestPayment({
-        orderId: session.orderId,
-        orderName: session.orderName,
-        successUrl: `${window.location.origin}/pay/success`,
-        failUrl: `${window.location.origin}/pay/fail`,
-      });
+      if (session.checkoutMode === "payment") {
+        const payment = ref as TossPaymentsPayment;
+        await payment.requestPayment({
+          method: "CARD",
+          amount: { currency: "KRW", value: session.amount },
+          orderId: session.orderId,
+          orderName: session.orderName,
+          successUrl: `${window.location.origin}/pay/success`,
+          failUrl: `${window.location.origin}/pay/fail`,
+        });
+      } else {
+        const widgets = ref as TossPaymentsWidgets;
+        await widgets.requestPayment({
+          orderId: session.orderId,
+          orderName: session.orderName,
+          successUrl: `${window.location.origin}/pay/success`,
+          failUrl: `${window.location.origin}/pay/fail`,
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "결제 요청 실패");
       setPaying(false);
@@ -148,23 +196,47 @@ export function PayCheckout() {
         <>
           <p className="text-xs text-zinc-500">
             주문번호 <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-1">{session.orderId}</code>
+            {session.checkoutMode === "payment" && (
+              <span className="ml-2 text-zinc-400">· API 개별 연동(통합 결제창)</span>
+            )}
+            {session.checkoutMode === "widget" && (
+              <span className="ml-2 text-zinc-400">· 결제위젯 UI</span>
+            )}
           </p>
-          <div id="pay-payment-method" className="min-h-[120px]" />
-          <div id="pay-agreement" className="min-h-[80px]" />
-          {!widgetsReady && (
-            <p className="text-xs text-zinc-500" aria-live="polite">
-              결제 수단·약관 UI를 불러오는 중… (준비되면 결제하기가 활성화됩니다)
+
+          {session.checkoutMode === "widget" ? (
+            <>
+              <div id="pay-payment-method" className="min-h-[120px]" />
+              <div id="pay-agreement" className="min-h-[80px]" />
+              {!checkoutReady && (
+                <p className="text-xs text-zinc-500" aria-live="polite">
+                  결제 수단·약관 UI를 불러오는 중… (준비되면 결제하기가 활성화됩니다)
+                </p>
+              )}
+            </>
+          ) : (
+            !checkoutReady && (
+              <p className="text-xs text-zinc-500" aria-live="polite">
+                결제창 연결 준비 중…
+              </p>
+            )
+          )}
+
+          {session.checkoutMode === "payment" && checkoutReady && (
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              아래 버튼을 누르면 토스 카드·간편결제 통합 결제창이 열립니다.
             </p>
           )}
+
           <button
             type="button"
             onClick={() => void requestPayment()}
-            disabled={paying || !widgetsReady}
+            disabled={paying || !checkoutReady}
             className="rounded-lg border border-zinc-900 dark:border-zinc-100 px-4 py-3 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {paying
               ? "결제창 여는 중…"
-              : widgetsReady
+              : checkoutReady
                 ? "2. 결제하기"
                 : "2. 결제하기 (준비 중)"}
           </button>

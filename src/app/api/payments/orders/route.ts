@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
-import { getTossWidgetClientKey } from "@/lib/toss/server";
+import { getTossCheckoutClientKeyAndMode } from "@/lib/toss/server";
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 
@@ -76,8 +76,11 @@ export async function POST(request: Request) {
   }
 
   let clientKey: string;
+  let checkoutMode: "widget" | "payment";
   try {
-    clientKey = getTossWidgetClientKey();
+    const ck = getTossCheckoutClientKeyAndMode();
+    clientKey = ck.clientKey;
+    checkoutMode = ck.mode;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "client key";
     return NextResponse.json(
@@ -92,5 +95,6 @@ export async function POST(request: Request) {
     orderName,
     customerKey: profile.toss_customer_key,
     clientKey,
+    checkoutMode,
   });
 }

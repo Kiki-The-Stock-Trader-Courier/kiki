@@ -1,10 +1,11 @@
 /**
- * 토스페이먼츠 **결제위젯 연동 키** (개발자센터 → 내 API 키 → **결제위젯 연동 키**)
+ * 토스페이먼츠 키 종류 (개발자센터 → 내 API 키)
  *
- * `loadTossPayments` / `widgets` / `payment()` 등 **JavaScript SDK**는 이 클라이언트 키만 지원합니다.
- * **API 개별 연동 키**로 SDK를 쓰면 "결제위젯 연동 키의 클라이언트 키로…" 오류가 납니다.
+ * - **결제위젯 연동 키** → SDK `widgets()` (결제수단·약관 UI). `payment()` 에는 사용 불가.
+ * - **API 개별 연동 키** → SDK `payment()` (통합 결제창). `widgets()` 에 넣으면 "결제위젯 연동 키로…" 오류.
  *
- * 서버의 결제 승인·빌링 API는 **같은 상점 키 세트의 시크릿 키**를 사용해야 클라이언트와 짝이 맞습니다.
+ * 단건 `/pay` 는 `NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY` 가 있으면 결제창, 없으면 위젯 키로 위젯 UI.
+ * 서버 승인·빌링은 **클라이언트와 같은 키 세트의 시크릿**을 써야 합니다.
  *
  * @see https://docs.tosspayments.com/reference/authorization
  */
@@ -13,7 +14,44 @@ export function getTossAuthorizationHeader(secretKey: string): string {
   return `Basic ${token}`;
 }
 
-/** 결제위젯 연동 시크릿 키 (서버 전용) */
+export type TossCheckoutMode = "widget" | "payment";
+
+/**
+ * 브라우저 SDK용 클라이언트 키와 연동 방식.
+ * API 개별 키가 우선 (많은 사용자가 위젯 대신 개별 키만 발급받는 경우).
+ */
+export function getTossCheckoutClientKeyAndMode(): {
+  mode: TossCheckoutMode;
+  clientKey: string;
+} {
+  const paymentsKey = process.env.NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY?.trim();
+  if (paymentsKey) {
+    return { mode: "payment", clientKey: paymentsKey };
+  }
+  const widgetKey = process.env.NEXT_PUBLIC_TOSS_WIDGET_CLIENT_KEY?.trim();
+  if (widgetKey) {
+    return { mode: "widget", clientKey: widgetKey };
+  }
+  throw new Error(
+    "토스 클라이언트 키가 없습니다. API 개별 연동이면 NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY, 결제위젯이면 NEXT_PUBLIC_TOSS_WIDGET_CLIENT_KEY 를 설정하세요.",
+  );
+}
+
+/** 결제 승인 API(`/v1/payments/confirm`) — 클라이언트 키 종류와 짝이 맞는 시크릿 */
+export function getTossSecretKeyForConfirm(): string {
+  if (process.env.NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY?.trim()) {
+    const k = process.env.TOSS_PAYMENTS_SECRET_KEY?.trim();
+    if (!k) {
+      throw new Error(
+        "NEXT_PUBLIC_TOSS_PAYMENTS_CLIENT_KEY 를 쓰는 경우 TOSS_PAYMENTS_SECRET_KEY 가 필요합니다. (API 개별 연동 시크릿 키)",
+      );
+    }
+    return k;
+  }
+  return getTossWidgetSecretKey();
+}
+
+/** 결제위젯 연동 시크릿 키 (서버 전용) — 빌링·위젯 전용 흐름 */
 export function getTossWidgetSecretKey(): string {
   const k = process.env.TOSS_WIDGET_SECRET_KEY?.trim();
   if (!k) {

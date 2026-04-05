@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import {
   getTossAuthorizationHeader,
-  getTossWidgetSecretKey,
+  getTossSecretKeyForConfirm,
 } from "@/lib/toss/server";
 import { NextResponse } from "next/server";
 
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
   let secretKey: string;
   try {
-    secretKey = getTossWidgetSecretKey();
+    secretKey = getTossSecretKeyForConfirm();
   } catch (e) {
     const msg = e instanceof Error ? e.message : "secret key";
     return NextResponse.json({ error: "server_misconfigured", message: msg }, { status: 503 });
