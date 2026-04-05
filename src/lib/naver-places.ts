@@ -31,14 +31,22 @@ function getNearbyRadiusMeters(): number {
   return getConfiguredNearbyRadiusMeters();
 }
 
+/** OSM 역지오코딩 — 네이버 키워드 검색을 동·구 단위로 좁히기 위한 힌트 */
+export type RegionHints = {
+  /** 구·시 등 넓은 행정구역 */
+  district?: string;
+  /** 동·읍·면 등 (가능할 때만) */
+  neighbourhood?: string;
+};
+
 /**
- * 좌표 기준 행정동/구 단서 (검색어 보강용).
- * OSM Nominatim — 가벼운 호출, 실패 시 무시.
+ * 좌표 기준 동·구 단서 (검색어 보강용).
+ * zoom 17로 세부 지역을 우선하고, 실패 시 넓은 구만 사용합니다.
  */
-export async function reverseGeocodeDistrictHint(
+export async function reverseGeocodeRegionHints(
   lat: number,
   lng: number,
-): Promise<string | undefined> {
+): Promise<RegionHints> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4000);
   try {
@@ -47,39 +55,60 @@ export async function reverseGeocodeDistrictHint(
     url.searchParams.set("lat", String(lat));
     url.searchParams.set("lon", String(lng));
     url.searchParams.set("accept-language", "ko");
-    url.searchParams.set("zoom", "14");
+    url.searchParams.set("zoom", "17");
     const res = await fetch(url.toString(), {
       headers: { "User-Agent": "KikiMap/1.0 (restaurant search)" },
       signal: controller.signal,
       next: { revalidate: 3600 },
     });
-    if (!res.ok) return undefined;
+    if (!res.ok) return {};
     const d = (await res.json()) as {
       address?: {
+        neighbourhood?: string;
+        quarter?: string;
         suburb?: string;
+        village?: string;
         city_district?: string;
+        borough?: string;
         town?: string;
         county?: string;
         city?: string;
-        borough?: string;
       };
     };
     const a = d.address;
-    if (!a) return undefined;
-    return (
-      a.suburb ||
-      a.borough ||
-      a.city_district ||
-      a.town ||
-      a.county ||
-      a.city ||
-      undefined
-    );
+    if (!a) return {};
+
+    const neighbourhood =
+      a.neighbourhood?.trim() ||
+      a.quarter?.trim() ||
+      a.village?.trim() ||
+      (a.suburb?.trim() && a.suburb.length <= 20 ? a.suburb.trim() : undefined) ||
+      (a.town?.trim() && a.town.length <= 20 ? a.town.trim() : undefined);
+
+    const district =
+      a.city_district?.trim() ||
+      a.borough?.trim() ||
+      a.county?.trim() ||
+      a.city?.trim();
+
+    const out: RegionHints = {};
+    if (district) out.district = district;
+    if (neighbourhood && neighbourhood !== district) out.neighbourhood = neighbourhood;
+    return out;
   } catch {
-    return undefined;
+    return {};
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** @deprecated 내부적으로 `reverseGeocodeRegionHints`의 district/neighbourhood 우선 사용 */
+export async function reverseGeocodeDistrictHint(
+  lat: number,
+  lng: number,
+): Promise<string | undefined> {
+  const h = await reverseGeocodeRegionHints(lat, lng);
+  return h.district ?? h.neighbourhood;
 }
 
 type NaverLocalItem = {
@@ -150,38 +179,46 @@ export async function searchNaverLocal(
 }
 
 /**
- * 지역 검색 후 **내 위치 기준 반경** 안의 장소만 남기고 거리순 정렬.
- * 네이버 API는 반경 파라미터가 없어, 최대 5페이지(25건)까지 받아 후보를 넓힌 뒤 필터합니다.
+ * 지역 검색 후 **내 위치 기준 반경 안** 장소만 거리순으로 반환합니다.
+ * 네이버 API는 좌표 반경이 없어 여러 쿼리·여러 페이지를 합친 뒤 거리로 걸러요.
+ * 반경 밖(예: 수 km) 장소를 “가까운 순”으로 보여 주던 폴백은 제거했습니다 — 잘못된 추천을 막기 위함입니다.
  */
 export async function searchNaverLocalNearby(
-  query: string,
+  queryOrQueries: string | string[],
   originLat: number,
   originLng: number,
   options?: { maxResults?: number; radiusMeters?: number },
 ): Promise<PlaceMarker[]> {
+  const queries = (Array.isArray(queryOrQueries) ? queryOrQueries : [queryOrQueries])
+    .map((q) => q.trim())
+    .filter((q) => q.length > 0);
   const radiusMeters = options?.radiusMeters ?? getNearbyRadiusMeters();
   const maxResults = Math.min(options?.maxResults ?? 5, 10);
 
   const id = process.env.NAVER_CLIENT_ID;
   const secret = process.env.NAVER_CLIENT_SECRET;
-  if (!id || !secret) {
+  if (!id || !secret || queries.length === 0) {
     return [];
   }
 
   const seen = new Set<string>();
   const allItems: NaverLocalItem[] = [];
+  // 쿼리 변형이 많을수록 페이지 수를 줄여 API 호출 폭주를 완화합니다.
+  const maxPagesPerQuery = queries.length > 2 ? 4 : 6;
 
-  for (let page = 0; page < 5; page++) {
-    const start = page * 5 + 1;
-    const items = await fetchNaverLocalPage(query, start, 5);
-    if (items.length === 0) break;
-    for (const it of items) {
-      const key = `${it.mapx}:${it.mapy}:${it.title}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      allItems.push(it);
+  for (const query of queries) {
+    for (let page = 0; page < maxPagesPerQuery; page++) {
+      const start = page * 5 + 1;
+      const items = await fetchNaverLocalPage(query, start, 5);
+      if (items.length === 0) break;
+      for (const it of items) {
+        const key = `${it.mapx}:${it.mapy}:${it.title}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        allItems.push(it);
+      }
+      if (items.length < 5) break;
     }
-    if (items.length < 5) break;
   }
 
   if (allItems.length === 0) return [];
@@ -193,10 +230,8 @@ export async function searchNaverLocalNearby(
   });
 
   const inRadius = withDistance.filter((p) => (p.distanceMeters ?? 0) <= radiusMeters);
-  const pool = inRadius.length > 0 ? inRadius : [...withDistance].sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0));
-
-  pool.sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0));
-  return pool.slice(0, maxResults);
+  inRadius.sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0));
+  return inRadius.slice(0, maxResults);
 }
 
 /** API 응답에 가격 정보가 거의 없으므로, 데모용으로 랜덤 가격 태그를 붙여 필터 시연 */
@@ -216,10 +251,10 @@ export function filterByMaxPrice<T extends { priceKrw?: number }>(
 }
 
 /**
- * 네이버 지역 검색용 쿼리 조립.
+ * 네이버 지역 검색용 쿼리 조립 (단일 문자열).
  * - keyword: 음식 종류 등
  * - filters.locationHint: 사용자가 문장에 쓴 지역 (예: 강남)
- * - regionHint: GPS 역지오코딩 동·구 (중복 시 한 번만)
+ * - regionHint: GPS 역지오코딩 구·동 (중복 시 한 번만)
  */
 export function buildSearchQuery(filters: ParsedFilters, regionHint?: string): string {
   const parts: string[] = [filters.keyword];
@@ -241,4 +276,49 @@ export function buildSearchQuery(filters: ParsedFilters, regionHint?: string): s
     out.push(s);
   }
   return out.join(" ").trim();
+}
+
+/**
+ * 네이버 지역 검색용 쿼리 후보 (세부 → 넓은 순).
+ * 사용자 문장에 지역이 있으면 그걸 우선하고, 없으면 `RegionHints`로 동·구를 붙입니다.
+ */
+export function buildSearchQueryVariants(
+  filters: ParsedFilters,
+  hints?: RegionHints,
+  regionParam?: string,
+): string[] {
+  const kw = (filters.keyword || "맛집").trim();
+  const loc = filters.locationHint?.trim();
+  const manual = regionParam?.trim();
+
+  const addUnique = (acc: string[], s: string) => {
+    const t = s.replace(/\s+/g, " ").trim();
+    if (t && !acc.includes(t)) acc.push(t);
+  };
+
+  const out: string[] = [];
+
+  if (manual) {
+    addUnique(out, `${kw} ${manual}`);
+    addUnique(out, kw);
+    return out;
+  }
+
+  if (loc) {
+    addUnique(out, `${kw} ${loc}`);
+    const d = hints?.district?.trim();
+    if (d && !loc.includes(d)) addUnique(out, `${kw} ${loc} ${d}`);
+    addUnique(out, kw);
+    return out;
+  }
+
+  const neigh = hints?.neighbourhood?.trim();
+  const dist = hints?.district?.trim();
+
+  if (neigh && dist) addUnique(out, `${kw} ${neigh} ${dist}`);
+  if (neigh) addUnique(out, `${kw} ${neigh}`);
+  if (dist) addUnique(out, `${kw} ${dist}`);
+  addUnique(out, kw);
+
+  return out;
 }

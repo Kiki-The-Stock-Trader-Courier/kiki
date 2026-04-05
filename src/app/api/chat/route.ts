@@ -3,10 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { parseFiltersFromText, type ParsedFilters } from "@/lib/chat-filters";
 import {
   attachDemoPrice,
-  buildSearchQuery,
+  buildSearchQueryVariants,
   filterByMaxPrice,
   getConfiguredNearbyRadiusMeters,
-  reverseGeocodeDistrictHint,
+  reverseGeocodeRegionHints,
   searchNaverLocalNearby,
   type PlaceMarker,
 } from "@/lib/naver-places";
@@ -128,9 +128,9 @@ export async function POST(request: Request) {
   const region = body.region ?? "";
 
   const filters = parseFiltersFromText(message);
-  const districtHint = region ? undefined : await reverseGeocodeDistrictHint(lat, lng);
-  const regionForQuery = region || districtHint || undefined;
-  const query = buildSearchQuery(filters, regionForQuery);
+  const regionHints = region ? undefined : await reverseGeocodeRegionHints(lat, lng);
+  const queries = buildSearchQueryVariants(filters, regionHints, region || undefined);
+  const query = queries.join(" | ") || filters.keyword;
 
   await supabase.from("chat_messages").insert({
     user_id: user.id,
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
     filters: filters as unknown as Record<string, unknown>,
   });
 
-  let places = await searchNaverLocalNearby(query, lat, lng, { maxResults: 5 });
+  let places = await searchNaverLocalNearby(queries, lat, lng, { maxResults: 5 });
   if (places.length === 0) {
     places = demoPlaces(lat, lng, filters.keyword);
   }

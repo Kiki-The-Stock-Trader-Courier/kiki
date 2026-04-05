@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   attachDemoPrice,
-  buildSearchQuery,
-  reverseGeocodeDistrictHint,
+  buildSearchQueryVariants,
+  reverseGeocodeRegionHints,
   searchNaverLocalNearby,
   type PlaceMarker,
 } from "@/lib/naver-places";
@@ -46,13 +46,15 @@ export async function GET(request: Request) {
   const region = searchParams.get("region") ?? "";
 
   const filters = parseFiltersFromText(q);
-  const districtHint = region ? undefined : await reverseGeocodeDistrictHint(lat, lng);
-  const query = buildSearchQuery(
+  const regionHints = region ? undefined : await reverseGeocodeRegionHints(lat, lng);
+  const queries = buildSearchQueryVariants(
     { ...filters, keyword: filters.keyword || q },
-    (region || districtHint) || undefined,
+    regionHints,
+    region || undefined,
   );
+  const query = queries.join(" | ") || q;
 
-  let places = await searchNaverLocalNearby(query, lat, lng, { maxResults: 5 });
+  let places = await searchNaverLocalNearby(queries, lat, lng, { maxResults: 5 });
   if (places.length === 0) {
     places = demoPlaces(lat, lng, filters.keyword || "맛집");
   }
