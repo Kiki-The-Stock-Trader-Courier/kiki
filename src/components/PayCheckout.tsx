@@ -13,7 +13,7 @@ type OrderSession = {
 
 /**
  * 토스 결제위젯 v2 — 주문 생성 후 결제 UI 렌더링 및 requestPayment.
- * `clientKey` 는 API 개별 연동 클라이언트 키(서버 `/api/payments/orders` 응답).
+ * `clientKey` 는 결제위젯 연동 클라이언트 키(서버 `/api/payments/orders` 응답). 개별 연동 키는 사용 불가.
  */
 export function PayCheckout() {
   const [amountInput, setAmountInput] = useState("1000");

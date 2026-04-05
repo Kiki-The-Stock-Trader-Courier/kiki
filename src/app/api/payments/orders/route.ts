@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
-import { getTossIndividualClientKey } from "@/lib/toss/server";
+import { getTossWidgetClientKey } from "@/lib/toss/server";
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 
 /**
  * 단건 결제 전 주문 행 생성 (orderId = 토스 orderId)
- * 클라이언트는 이 orderId로 결제위젯 requestPayment 호출 (API 개별 연동 클라이언트 키 사용)
+ * 클라이언트는 이 orderId로 결제위젯 requestPayment 호출 (결제위젯 연동 클라이언트 키)
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
   let clientKey: string;
   try {
-    clientKey = getTossIndividualClientKey();
+    clientKey = getTossWidgetClientKey();
   } catch (e) {
     const msg = e instanceof Error ? e.message : "client key";
     return NextResponse.json(

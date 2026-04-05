@@ -5,7 +5,7 @@ import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 import { useCallback, useState } from "react";
 
 /**
- * 카드 자동결제(빌링) 등록 — `NEXT_PUBLIC_TOSS_INDIVIDUAL_CLIENT_KEY` 로 SDK 초기화.
+ * 카드 자동결제(빌링) — 결제위젯 연동 클라이언트 키로 SDK 초기화 (개별 연동 키는 SDK 미지원).
  * 인증 후 `/subscribe/success` 에서 빌링키 발급 API 호출.
  */
 export function SubscribeBilling() {
@@ -37,10 +37,10 @@ export function SubscribeBilling() {
       return;
     }
 
-    const clientKey = process.env.NEXT_PUBLIC_TOSS_INDIVIDUAL_CLIENT_KEY?.trim();
+    const clientKey = process.env.NEXT_PUBLIC_TOSS_WIDGET_CLIENT_KEY?.trim();
     if (!clientKey) {
       setError(
-        "NEXT_PUBLIC_TOSS_INDIVIDUAL_CLIENT_KEY 가 없습니다. (API 개별 연동 클라이언트 키)",
+        "NEXT_PUBLIC_TOSS_WIDGET_CLIENT_KEY 가 없습니다. (결제위젯 연동 클라이언트 키)",
       );
       setLoading(false);
       return;
