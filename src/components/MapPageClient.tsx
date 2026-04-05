@@ -30,6 +30,8 @@ export default function MapPageClient() {
   const [loading, setLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [n8nConfigured, setN8nConfigured] = useState<boolean | null>(null);
+  /** 서버에 NAVER_CLIENT_ID/SECRET이 있으면 true — 없으면 지역 검색은 데모 마커만 사용 */
+  const [naverConfigured, setNaverConfigured] = useState<boolean | null>(null);
   const [lastReplySource, setLastReplySource] = useState<"n8n" | "server" | null>(
     null,
   );
@@ -42,7 +44,11 @@ export default function MapPageClient() {
         lng: String(userLng),
       });
       const res = await fetch(`/api/places?${params}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        // 401·네트워크 오류 시 마커가 비어 있음 — 연결(로그인)·환경변수 확인
+        setPlaces([]);
+        return;
+      }
       const data = (await res.json()) as { places: MapPlace[] };
       setPlaces(data.places ?? []);
     },
@@ -73,9 +79,21 @@ export default function MapPageClient() {
 
   useEffect(() => {
     void fetch("/api/integrations/status")
-      .then((r) => r.json() as Promise<{ n8nChat?: boolean }>)
-      .then((j) => setN8nConfigured(Boolean(j.n8nChat)))
-      .catch(() => setN8nConfigured(null));
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            n8nChat?: boolean;
+            naver?: boolean;
+          }>,
+      )
+      .then((j) => {
+        setN8nConfigured(Boolean(j.n8nChat));
+        setNaverConfigured(Boolean(j.naver));
+      })
+      .catch(() => {
+        setN8nConfigured(null);
+        setNaverConfigured(null);
+      });
   }, []);
 
   async function signOut() {
@@ -165,6 +183,16 @@ export default function MapPageClient() {
           </div>
           <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
             연결: 채팅 → <code className="rounded bg-zinc-200/60 dark:bg-zinc-800 px-1">POST /api/chat</code>
+            {naverConfigured === true && " · 네이버 지역검색 연결됨"}
+            {naverConfigured === false && (
+              <>
+                {" "}
+                ·{" "}
+                <span className="text-amber-700 dark:text-amber-400">
+                  네이버 키 없음 → 장소는 데모(주소에 안내 문구)
+                </span>
+              </>
+            )}
             {n8nConfigured === true && " · n8n Webhook URL 설정됨"}
             {n8nConfigured === false && " · n8n 미설정(답은 서버 기본 문장)"}
             {lastReplySource && (
