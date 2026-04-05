@@ -28,10 +28,25 @@ function demoPlaces(lat: number, lng: number, keyword: string): PlaceMarker[] {
   }));
 }
 
-async function maybeCallN8n(
-  message: string,
-  filters: ParsedFilters,
-): Promise<{ text: string | null; usedN8n: boolean }> {
+/** n8n Webhook으로 전달 — OpenAI 노드가 장소 목록을 근거로 답변 생성 */
+export type N8nChatPayload = {
+  message: string;
+  filters: ParsedFilters;
+  searchQuery: string;
+  userLat: number;
+  userLng: number;
+  radiusMeters: number;
+  places: Array<{
+    title: string;
+    category: string;
+    roadAddress: string;
+    priceKrw?: number;
+    distanceMeters?: number;
+    link?: string;
+  }>;
+};
+
+async function maybeCallN8n(payload: N8nChatPayload): Promise<{ text: string | null; usedN8n: boolean }> {
   const url = process.env.N8N_CHAT_WEBHOOK_URL?.trim();
   if (!url) {
     return { text: null, usedN8n: false };
@@ -40,8 +55,8 @@ async function maybeCallN8n(
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, filters }),
-      signal: AbortSignal.timeout(20000),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(60000),
     });
     if (!res.ok) {
       return { text: null, usedN8n: false };
@@ -105,7 +120,22 @@ export async function POST(request: Request) {
   let list = attachDemoPrice(places);
   list = filterByMaxPrice(list, filters.maxPriceKrw);
 
-  const n8n = await maybeCallN8n(message, filters);
+  const n8n = await maybeCallN8n({
+    message,
+    filters,
+    searchQuery: query,
+    userLat: lat,
+    userLng: lng,
+    radiusMeters: getConfiguredNearbyRadiusMeters(),
+    places: list.map((p) => ({
+      title: p.title,
+      category: p.category,
+      roadAddress: p.roadAddress,
+      priceKrw: p.priceKrw,
+      distanceMeters: p.distanceMeters,
+      link: p.link,
+    })),
+  });
   const radiusKm = (getConfiguredNearbyRadiusMeters() / 1000).toFixed(1);
   const assistantText =
     n8n.text ??

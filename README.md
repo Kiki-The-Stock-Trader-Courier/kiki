@@ -19,10 +19,11 @@ Next.js + Supabase(로그인·DB) + 네이버 지역 검색 + (선택) n8n 챗�
 ## n8n
 
 1. n8n에서 **Workflow → Import from File** 로 `n8n/kiki-chat.workflow.json` 가져오기  
-2. 워크플로 **Activate** 후 **Webhook** 노드에 표시된 **Production URL** 전체를 복사  
-3. Vercel에 `N8N_CHAT_WEBHOOK_URL` 로 등록 후 Redeploy  
+2. **OpenAI** 노드에서 **Credential** 추가 — OpenAI API 키([플랫폼](https://platform.openai.com/api-keys))  
+3. 워크플로 **Activate** 후 **Webhook** 노드의 **Production URL** 전체를 복사  
+4. Vercel에 `N8N_CHAT_WEBHOOK_URL` 로 등록 후 Redeploy  
 
-Webhook은 `POST` JSON `{ "message": "...", "filters": { "keyword": "카페", "maxPriceKrw": 15000 } }` 를 받고, 응답은 `{ "reply": "문자열" }` 형식이어야 합니다.
+서버가 `POST`로 보내는 JSON에는 사용자 메시지, 필터, **주변 검색으로 모은 `places` 배열**(이름·주소·예상가·거리 등), `userLat` / `userLng` / `radiusMeters` / `searchQuery` 가 포함됩니다. 워크플로는 **PreparePrompt → OpenAI(gpt-4o-mini) → ExtractReply** 로 한국어 답변을 만들고, 응답은 `{ "reply": "문자열" }` 이어야 합니다.
 
 ## 개발
 

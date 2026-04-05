@@ -11,19 +11,61 @@
       "id": "webhook-kiki",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [260, 300],
-      "webhookId": "kiki-chat"
+      "typeVersion": 2.1,
+      "position": [240, 300],
+      "webhookId": "kiki-chat",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const root = $input.first().json;\nconst body = root.body && typeof root.body === 'object' ? root.body : root;\nconst message = body.message ?? '';\nconst filters = body.filters ?? {};\nconst kw = filters.keyword ?? '맛집';\nconst price = filters.maxPriceKrw;\nconst priceLine = price ? ` 가격 상한 ${price}원` : '';\nreturn {\n  json: {\n    reply: `[n8n] \"${kw}\" 검색 기준으로 도와드릴게요.${priceLine} (메시지: ${message.slice(0, 80)})`\n  }\n};"
+        "mode": "runOnceForEachItem",
+        "jsCode": "const root = $input.item.json;\nconst body = root.body && typeof root.body === 'object' ? root.body : root;\nconst message = body.message ?? '';\nconst filters = body.filters ?? {};\nconst places = Array.isArray(body.places) ? body.places : [];\nconst kw = filters.keyword ?? '맛집';\nconst radiusM = body.radiusMeters ?? 2500;\nconst searchQuery = body.searchQuery ?? '';\nconst lines = places.map((p, i) => {\n  const dist = p.distanceMeters != null ? Math.round(p.distanceMeters) + 'm' : '거리미상';\n  const price = p.priceKrw != null ? Number(p.priceKrw).toLocaleString() + '원(예상·데모)' : '가격미상';\n  return (i + 1) + '. ' + p.title + '\\n   분류: ' + p.category + '\\n   주소: ' + p.roadAddress + '\\n   내 위치까지: ' + dist + '\\n   예상가: ' + price;\n});\nconst system = '너는 한국어 맛집·카페 도우미이다. 반드시 아래 \"검색된 장소 목록\"만 근거로 답한다. 목록에 없는 업소 이름·주소·가격을 지어내지 마라. 사용자 질문 의도(예: 내 위치 주변 카페)에 맞게 친절하고 간결하게 답하고, 각 장소마다 이름·주소·거리·예상가(데모)를 읽기 쉽게 정리해라.';\nconst user = '사용자 질문: ' + message + '\\n\\n파싱된 키워드: ' + kw + '\\n지역 검색어(서버): ' + searchQuery + '\\n주변 반경(대략): ' + (Math.round(radiusM / 10) / 100) + 'km\\n\\n검색된 장소 목록:\\n' + (lines.length ? lines.join('\\n\\n') : '(목록 없음)');\nreturn { json: { system, user } };"
       },
-      "id": "code-reply",
-      "name": "BuildReply",
+      "id": "prepare-prompt",
+      "name": "PreparePrompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 300]
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "complete",
+        "chatModel": "gpt-4o-mini",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "={{ $json.system }}"
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.user }}"
+            }
+          ]
+        },
+        "simplifyOutput": true,
+        "options": {
+          "maxTokens": 900,
+          "temperature": 0.35
+        }
+      },
+      "id": "openai-chat",
+      "name": "OpenAI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $input.item.json;\nconst reply = (j.message && j.message.content) ? j.message.content : (j.content || j.text || '');\nreturn { json: { reply: String(reply).trim() || '응답을 만들지 못했습니다.' } };"
+      },
+      "id": "extract-reply",
+      "name": "ExtractReply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
     },
     {
       "parameters": {
@@ -34,8 +76,8 @@
       "id": "respond-webhook",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [780, 300]
+      "typeVersion": 1.5,
+      "position": [1200, 300]
     }
   ],
   "connections": {
@@ -43,14 +85,36 @@
       "main": [
         [
           {
-            "node": "BuildReply",
+            "node": "PreparePrompt",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "BuildReply": {
+    "PreparePrompt": {
+      "main": [
+        [
+          {
+            "node": "OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI": {
+      "main": [
+        [
+          {
+            "node": "ExtractReply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ExtractReply": {
       "main": [
         [
           {
@@ -69,7 +133,6 @@
   "staticData": null,
   "tags": [],
   "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "versionId": "1"
+    "templateCredsSetupCompleted": false
+  }
 }

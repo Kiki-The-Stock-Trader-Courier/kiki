@@ -97,12 +97,12 @@ export default function SetupPage() {
           )를 등록하세요.
         </p>
         <p>
-          <strong>n8n:</strong> 워크플로를 배포한 뒤 Webhook URL 전체를{" "}
+          <strong>n8n:</strong> <code className="rounded px-1">n8n/kiki-chat.workflow.json</code> 을
+          가져와 OpenAI 자격 증명을 연결한 뒤 Webhook Production URL을{" "}
           <code className="rounded bg-white/50 dark:bg-black/30 px-1">
             N8N_CHAT_WEBHOOK_URL
           </code>
-          에 넣습니다. 저장소의 <code className="rounded px-1">n8n/kiki-chat.workflow.json</code> 을
-          가져오면 됩니다.
+          에 넣습니다.
         </p>
       </div>
 

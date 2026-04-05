@@ -24,7 +24,7 @@ export default function MapPageClient() {
   const [lines, setLines] = useState<ChatLine[]>([
     {
       role: "assistant",
-      text: "입력한 내용은 서버 /api/chat 으로 전달됩니다. 키워드·가격을 읽고, 네이버 지역 검색 결과 중 내 위치 주변 반경(기본 약 2.5km) 안 장소를 지도에 표시합니다. Vercel에 N8N_CHAT_WEBHOOK_URL을 넣으면 답 문장을 n8n이 만들 수 있습니다.\n\n원하는 음식 종류(예: 카페, 한식)나 가격(예: 2만원 이하)을 말해 주세요.",
+      text: "입력한 내용은 서버 /api/chat 으로 전달됩니다. 주변 장소 목록은 네이버 검색·거리 필터로 만들고, Vercel에 N8N_CHAT_WEBHOOK_URL이 있으면 n8n(OpenAI)이 그 목록만 근거로 답을 씁니다.\n\n예: 내 위치 주변 카페, 2만원 이하 한식 등.",
     },
   ]);
   const [loading, setLoading] = useState(false);
