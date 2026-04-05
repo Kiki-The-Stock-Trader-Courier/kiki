@@ -108,6 +108,18 @@ export default function SetupPage() {
 
       <div className="flex flex-wrap gap-3">
         <Link
+          href="/pay"
+          className="inline-flex items-center justify-center rounded-lg border border-zinc-300 dark:border-zinc-600 px-4 py-3 text-sm"
+        >
+          단건 결제 (토스 테스트)
+        </Link>
+        <Link
+          href="/subscribe"
+          className="inline-flex items-center justify-center rounded-lg border border-zinc-300 dark:border-zinc-600 px-4 py-3 text-sm"
+        >
+          정기결제·빌링 (토스 테스트)
+        </Link>
+        <Link
           href="/map"
           className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
         >
