@@ -215,8 +215,30 @@ export function filterByMaxPrice<T extends { priceKrw?: number }>(
   return places.filter((p) => (p.priceKrw ?? 999999) <= max);
 }
 
+/**
+ * 네이버 지역 검색용 쿼리 조립.
+ * - keyword: 음식 종류 등
+ * - filters.locationHint: 사용자가 문장에 쓴 지역 (예: 강남)
+ * - regionHint: GPS 역지오코딩 동·구 (중복 시 한 번만)
+ */
 export function buildSearchQuery(filters: ParsedFilters, regionHint?: string): string {
-  const parts = [filters.keyword];
-  if (regionHint) parts.push(regionHint);
-  return parts.join(" ").trim();
+  const parts: string[] = [filters.keyword];
+  if (filters.locationHint?.trim()) {
+    parts.push(filters.locationHint.trim());
+  }
+  if (regionHint?.trim()) {
+    const g = regionHint.trim();
+    if (g !== filters.locationHint?.trim()) {
+      parts.push(g);
+    }
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const s = p.trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out.join(" ").trim();
 }

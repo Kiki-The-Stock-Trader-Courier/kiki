@@ -145,7 +145,14 @@ export async function POST(request: Request) {
   }
 
   let list = attachDemoPrice(places);
+  const beforePrice = list;
   list = filterByMaxPrice(list, filters.maxPriceKrw);
+  let priceFilterRelaxed = false;
+  // 데모 예상가만 있어 전부 걸러지면, 지도가 비지 않도록 필터 완화
+  if (list.length === 0 && beforePrice.length > 0 && filters.maxPriceKrw != null) {
+    list = beforePrice;
+    priceFilterRelaxed = true;
+  }
 
   const n8n = await maybeCallN8n({
     message,
@@ -164,7 +171,10 @@ export async function POST(request: Request) {
     })),
   });
   const radiusKm = (getConfiguredNearbyRadiusMeters() / 1000).toFixed(1);
-  const assistantText = n8n.text ?? buildServerFallbackReply(filters, list, radiusKm);
+  let assistantText = n8n.text ?? buildServerFallbackReply(filters, list, radiusKm);
+  if (!n8n.text && priceFilterRelaxed && filters.maxPriceKrw != null) {
+    assistantText += `\n\n※ 데모 예상가로 ${filters.maxPriceKrw.toLocaleString()}원 이하만 골라보려 했지만 맞는 곳이 없어, 지도와 같이 조건 없이 보여 드려요.`;
+  }
   const replySource = n8n.usedN8n ? "n8n" : "server";
 
   await supabase.from("chat_messages").insert({
