@@ -135,7 +135,19 @@ export default function MapPageClient() {
         <header className="border-b border-zinc-200 dark:border-zinc-800 px-3 py-2 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-sm font-semibold">맛집 챗봇</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <Link
+              href="/pay"
+              className="text-xs rounded border border-emerald-600/50 dark:border-emerald-500/50 text-emerald-800 dark:text-emerald-300 px-2 py-1 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+            >
+              단건 결제
+            </Link>
+            <Link
+              href="/subscribe"
+              className="text-xs rounded border border-violet-600/50 dark:border-violet-500/50 text-violet-800 dark:text-violet-300 px-2 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/50"
+            >
+              정기·빌링
+            </Link>
             <Link
               href="/setup"
               className="text-xs rounded border border-zinc-300 dark:border-zinc-600 px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
