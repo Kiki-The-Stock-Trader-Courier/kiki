@@ -46,6 +46,33 @@ export type N8nChatPayload = {
   }>;
 };
 
+/** n8n 미사용 시 — 지도 마커와 동일한 목록을 짧게 요약 */
+function buildServerFallbackReply(
+  filters: ParsedFilters,
+  list: Array<PlaceMarker & { priceKrw?: number }>,
+  radiusKm: string,
+): string {
+  const priceFilterNote = filters.maxPriceKrw
+    ? `\n(데모 예상가 ${filters.maxPriceKrw.toLocaleString()}원 이하만 표시)`
+    : "";
+  if (list.length === 0) {
+    return `「${filters.keyword}」 주변 약 ${radiusKm}km에서 조건에 맞는 곳이 없었어요.${priceFilterNote}`;
+  }
+  const lines = list.map((p, i) => {
+    const dist =
+      p.distanceMeters != null
+        ? p.distanceMeters < 1000
+          ? `${p.distanceMeters}m`
+          : `${(p.distanceMeters / 1000).toFixed(1)}km`
+        : null;
+    const price = p.priceKrw != null ? `예상 ${p.priceKrw.toLocaleString()}원` : null;
+    const bits = [dist, price].filter(Boolean) as string[];
+    const suffix = bits.length ? ` (${bits.join(" · ")})` : "";
+    return `${i + 1}) ${p.title}${suffix}`;
+  });
+  return `「${filters.keyword}」 주변 약 ${radiusKm}km — 지도에 표시한 곳:${priceFilterNote}\n${lines.join("\n")}`;
+}
+
 async function maybeCallN8n(payload: N8nChatPayload): Promise<{ text: string | null; usedN8n: boolean }> {
   const url = process.env.N8N_CHAT_WEBHOOK_URL?.trim();
   if (!url) {
@@ -137,13 +164,7 @@ export async function POST(request: Request) {
     })),
   });
   const radiusKm = (getConfiguredNearbyRadiusMeters() / 1000).toFixed(1);
-  const assistantText =
-    n8n.text ??
-    `「${filters.keyword}」 기준으로 내 위치 주변 약 ${radiusKm}km 안에서 골라 봤어요.${
-      filters.maxPriceKrw
-        ? ` 가격은 앱에서 데모 금액(건당 ${filters.maxPriceKrw.toLocaleString()}원 이하)으로 필터했습니다.`
-        : ""
-    } 결과 ${list.length}곳입니다.`;
+  const assistantText = n8n.text ?? buildServerFallbackReply(filters, list, radiusKm);
   const replySource = n8n.usedN8n ? "n8n" : "server";
 
   await supabase.from("chat_messages").insert({
