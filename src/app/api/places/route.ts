@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import {
   attachDemoPrice,
   buildSearchQuery,
-  searchNaverLocal,
+  reverseGeocodeDistrictHint,
+  searchNaverLocalNearby,
   type PlaceMarker,
 } from "@/lib/naver-places";
 import { parseFiltersFromText } from "@/lib/chat-filters";
@@ -45,12 +46,13 @@ export async function GET(request: Request) {
   const region = searchParams.get("region") ?? "";
 
   const filters = parseFiltersFromText(q);
+  const districtHint = region ? undefined : await reverseGeocodeDistrictHint(lat, lng);
   const query = buildSearchQuery(
     { ...filters, keyword: filters.keyword || q },
-    region || undefined,
+    (region || districtHint) || undefined,
   );
 
-  let places = await searchNaverLocal(query, 5);
+  let places = await searchNaverLocalNearby(query, lat, lng, { maxResults: 5 });
   if (places.length === 0) {
     places = demoPlaces(lat, lng, filters.keyword || "맛집");
   }

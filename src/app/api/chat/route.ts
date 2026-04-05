@@ -5,7 +5,9 @@ import {
   attachDemoPrice,
   buildSearchQuery,
   filterByMaxPrice,
-  searchNaverLocal,
+  getConfiguredNearbyRadiusMeters,
+  reverseGeocodeDistrictHint,
+  searchNaverLocalNearby,
   type PlaceMarker,
 } from "@/lib/naver-places";
 
@@ -84,7 +86,9 @@ export async function POST(request: Request) {
   const region = body.region ?? "";
 
   const filters = parseFiltersFromText(message);
-  const query = buildSearchQuery(filters, region || undefined);
+  const districtHint = region ? undefined : await reverseGeocodeDistrictHint(lat, lng);
+  const regionForQuery = region || districtHint || undefined;
+  const query = buildSearchQuery(filters, regionForQuery);
 
   await supabase.from("chat_messages").insert({
     user_id: user.id,
@@ -93,7 +97,7 @@ export async function POST(request: Request) {
     filters: filters as unknown as Record<string, unknown>,
   });
 
-  let places = await searchNaverLocal(query, 5);
+  let places = await searchNaverLocalNearby(query, lat, lng, { maxResults: 5 });
   if (places.length === 0) {
     places = demoPlaces(lat, lng, filters.keyword);
   }
@@ -102,9 +106,10 @@ export async function POST(request: Request) {
   list = filterByMaxPrice(list, filters.maxPriceKrw);
 
   const n8n = await maybeCallN8n(message, filters);
+  const radiusKm = (getConfiguredNearbyRadiusMeters() / 1000).toFixed(1);
   const assistantText =
     n8n.text ??
-    `「${filters.keyword}」 기준으로 검색했어요.${
+    `「${filters.keyword}」 기준으로 내 위치 주변 약 ${radiusKm}km 안에서 골라 봤어요.${
       filters.maxPriceKrw
         ? ` 가격은 앱에서 데모 금액(건당 ${filters.maxPriceKrw.toLocaleString()}원 이하)으로 필터했습니다.`
         : ""

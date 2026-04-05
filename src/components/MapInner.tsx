@@ -13,6 +13,8 @@ export type MapPlace = {
   lng: number;
   link?: string;
   priceKrw?: number;
+  /** 내 위치 기준 직선거리(m) */
+  distanceMeters?: number;
 };
 
 /** Next.js 번들 환경에서 기본 마커 아이콘 경로가 깨지는 문제 보정 */
@@ -91,6 +93,11 @@ export default function MapInner({ userLat, userLng, places }: Props) {
               <p className="font-semibold">{p.title}</p>
               <p className="text-gray-600">{p.category}</p>
               <p>{p.roadAddress}</p>
+              {p.distanceMeters != null && (
+                <p className="mt-1 text-blue-700 dark:text-blue-300">
+                  내 위치에서 약 {p.distanceMeters < 1000 ? `${p.distanceMeters}m` : `${(p.distanceMeters / 1000).toFixed(1)}km`}
+                </p>
+              )}
               {p.priceKrw != null && (
                 <p className="mt-1 text-amber-700">
                   예상(데모) {p.priceKrw.toLocaleString()}원
