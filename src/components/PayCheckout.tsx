@@ -22,6 +22,8 @@ export function PayCheckout() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
+  /** renderPaymentMethods / renderAgreement 완료 후에만 true — 그 전에 결제하기 누르면 ref 가 비어 있음 */
+  const [widgetsReady, setWidgetsReady] = useState(false);
   const widgetsRef = useRef<TossPaymentsWidgets | null>(null);
 
   const createOrder = async () => {
@@ -29,6 +31,7 @@ export function PayCheckout() {
     setError(null);
     setSession(null);
     widgetsRef.current = null;
+    setWidgetsReady(false);
     const amount = Number(amountInput);
     const res = await fetch("/api/payments/orders", {
       method: "POST",
@@ -54,6 +57,8 @@ export function PayCheckout() {
     if (!session) return;
 
     let cancelled = false;
+    setWidgetsReady(false);
+    widgetsRef.current = null;
 
     (async () => {
       try {
@@ -68,23 +73,29 @@ export function PayCheckout() {
         });
         if (!cancelled) {
           widgetsRef.current = widgets;
+          setWidgetsReady(true);
         }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "결제 UI 로드 실패");
+          setWidgetsReady(false);
         }
       }
     })();
 
     return () => {
       cancelled = true;
+      widgetsRef.current = null;
+      setWidgetsReady(false);
     };
   }, [session]);
 
   const requestPayment = async () => {
     const w = widgetsRef.current;
-    if (!session || !w) {
-      setError("결제 UI가 아직 준비되지 않았습니다.");
+    if (!session || !w || !widgetsReady) {
+      setError(
+        "결제 UI를 불러오는 중입니다. 잠시 후 다시 눌러 주세요.",
+      );
       return;
     }
     setPaying(true);
@@ -140,13 +151,22 @@ export function PayCheckout() {
           </p>
           <div id="pay-payment-method" className="min-h-[120px]" />
           <div id="pay-agreement" className="min-h-[80px]" />
+          {!widgetsReady && (
+            <p className="text-xs text-zinc-500" aria-live="polite">
+              결제 수단·약관 UI를 불러오는 중… (준비되면 결제하기가 활성화됩니다)
+            </p>
+          )}
           <button
             type="button"
             onClick={() => void requestPayment()}
-            disabled={paying}
-            className="rounded-lg border border-zinc-900 dark:border-zinc-100 px-4 py-3 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
+            disabled={paying || !widgetsReady}
+            className="rounded-lg border border-zinc-900 dark:border-zinc-100 px-4 py-3 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {paying ? "결제창 여는 중…" : "2. 결제하기"}
+            {paying
+              ? "결제창 여는 중…"
+              : widgetsReady
+                ? "2. 결제하기"
+                : "2. 결제하기 (준비 중)"}
           </button>
         </>
       )}
